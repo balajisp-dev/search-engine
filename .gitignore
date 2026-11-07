@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Data and outputs
+data/*
+!data/.gitkeep
+
+# Rust (later)
+engine/target/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+.claude/settings.local.json*
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key

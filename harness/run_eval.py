@@ -8,6 +8,7 @@ harness.metrics, prints a scorecard and saves the run to results/<dataset>-<time
 
     Retriever     nDCG@10  Recall@100  MRR@10  p50 ms  p99 ms  index s
 """
+from engine_py.bm25 import MyBM25Retriever
 from harness.baselines import DenseRetriever,BM25sRetriever
 from harness.datasets import Dataset, load_dataset
 from harness.retriever import Retriever
@@ -95,6 +96,6 @@ if __name__=="__main__":
     parser.add_argument("--dataset", default="scifact")
     arg=parser.parse_args()
     dataset=load_dataset(dataset_name=arg.dataset)
-    results=[run_eval(dataset,BM25sRetriever()),run_eval(dataset,DenseRetriever())]
+    results=[run_eval(dataset,BM25sRetriever()),run_eval(dataset,MyBM25Retriever()),run_eval(dataset,DenseRetriever())]
     print_scorecard(dataset.name,results)
     print(f"\nsaved {save_results(dataset,results).relative_to(RESULTS_DIR.parent)}")

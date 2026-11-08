@@ -1,0 +1,59 @@
+"""BM25 scoring over the inverted index.
+
+Uses InvertedIndex fields: doc_ids, docs_len, postings, N, avgdl, df(term).
+
+Matches bm25s's defaults: k1=1.5, b=0.75, Lucene IDF:
+
+    IDF(t)   = ln(1 + (N - df + 0.5) / (df + 0.5))
+    L        = 1 - b + b * dl / avgdl
+    TF-part  = tf * (k1 + 1) / (tf + k1 * L)
+    score    = sum over query terms of IDF(t) * TF-part
+
+Search is term-at-a-time: walk each query term's postings, add into a {doc id: score}
+accumulator, take the top k with heapq.nlargest. A query term repeated n times counts n times.
+
+bm25s's "lucene" method drops the constant (k1 + 1), so these scores are exactly 2.5x its scores;
+the ranking is identical.
+"""
+from engine_py.analyzer import Analyzer
+from engine_py.index import InvertedIndex
+import heapq
+import math
+
+class MyBM25Retriever:
+    name: str = "my-bm25"
+
+    def __init__(self, k1: float = 1.5, b: float = 0.75) -> None:
+        self.k1 = k1
+        self.b = b
+        self.analyzer = Analyzer()
+        self.inverted_index=InvertedIndex(self.analyzer)
+
+    def index(self, docs: dict[str, str]) -> None:
+        self.inverted_index.build(docs=docs)
+
+    def idf(self, term: str) -> float:
+        docs_with_term=self.inverted_index.df(term)
+        N=self.inverted_index.N
+        return math.log(1+(N-docs_with_term+0.5)/(docs_with_term+0.5))
+
+    def L(self,doc_len):
+        return (1-self.b+(self.b*doc_len/self.inverted_index.avgdl))
+
+    def tf(self,doc_pos:int,tf:int) -> float:
+        doc_length=self.inverted_index.docs_len[doc_pos]
+        L=self.L(doc_length)
+        return ((self.k1+1)*tf/(tf+self.k1*L))
+
+    def search(self, query: str, k: int) -> list[tuple[str, float]]:
+        tokens=self.analyzer.analyze(query)
+        results={}
+        for token in tokens:
+            idf=self.idf(token)
+            for doc_pos,tf in self.inverted_index.postings.get(token,[]):
+                tf_part=self.tf(doc_pos=doc_pos,tf=tf)
+                score=idf*tf_part
+                results.setdefault(self.inverted_index.doc_ids[doc_pos],0)
+                results[self.inverted_index.doc_ids[doc_pos]]+=score
+        return heapq.nlargest(k,results.items(),key=lambda item:item[1])
+

@@ -6,12 +6,13 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy>=1.26",
     "tqdm>=4.66",
+    "PyStemmer>=2.2",
+    "requests>=2.31",
 ]
 
 [project.optional-dependencies]
 baselines = [
     "bm25s>=0.2",
-    "PyStemmer>=2.2",
     "sentence-transformers>=3.0",
     "faiss-cpu>=1.8",
 ]
@@ -25,7 +26,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["harness"]
+packages = ["harness", "engine_py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

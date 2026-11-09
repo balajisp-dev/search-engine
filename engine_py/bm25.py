@@ -19,29 +19,38 @@ from engine_py.analyzer import Analyzer
 from engine_py.index import InvertedIndex
 import heapq
 import math
+from pathlib import Path
+from engine_py.segment import SegmentReader, write_segment
+
+
+DEFAULT_INDEX_DIR=Path(__file__).resolve().parent.parent / "indexes" / "default"
 
 class MyBM25Retriever:
     name: str = "my-bm25"
 
-    def __init__(self, k1: float = 1.5, b: float = 0.75) -> None:
+    def __init__(self, k1: float = 1.5, b: float = 0.75,indexes_dir:Path=DEFAULT_INDEX_DIR) -> None:
         self.k1 = k1
         self.b = b
         self.analyzer = Analyzer()
-        self.inverted_index=InvertedIndex(self.analyzer)
+        self.path=indexes_dir / "segment_0"
+        self.segment_reader:SegmentReader | None = None
 
     def index(self, docs: dict[str, str]) -> None:
-        self.inverted_index.build(docs=docs)
+        inverted_index=InvertedIndex(self.analyzer)
+        inverted_index.build(docs=docs)
+        write_segment(inverted_index,self.path)
+        self.segment_reader=SegmentReader(self.path)
 
     def idf(self, term: str) -> float:
-        docs_with_term=self.inverted_index.df(term)
-        N=self.inverted_index.N
+        docs_with_term=self.segment_reader.df(term)
+        N=self.segment_reader.N
         return math.log(1+(N-docs_with_term+0.5)/(docs_with_term+0.5))
 
     def L(self,doc_len):
-        return (1-self.b+(self.b*doc_len/self.inverted_index.avgdl))
+        return (1-self.b+(self.b*doc_len/self.segment_reader.avgdl))
 
     def tf(self,doc_pos:int,tf:int) -> float:
-        doc_length=self.inverted_index.docs_len[doc_pos]
+        doc_length=self.segment_reader.docs_len[doc_pos]
         L=self.L(doc_length)
         return ((self.k1+1)*tf/(tf+self.k1*L))
 
@@ -50,10 +59,10 @@ class MyBM25Retriever:
         results={}
         for token in tokens:
             idf=self.idf(token)
-            for doc_pos,tf in self.inverted_index.postings.get(token,[]):
+            for doc_pos,tf in self.segment_reader.postings(token):
                 tf_part=self.tf(doc_pos=doc_pos,tf=tf)
                 score=idf*tf_part
-                results.setdefault(self.inverted_index.doc_ids[doc_pos],0)
-                results[self.inverted_index.doc_ids[doc_pos]]+=score
+                results.setdefault(self.segment_reader.doc_ids[doc_pos],0)
+                results[self.segment_reader.doc_ids[doc_pos]]+=score
         return heapq.nlargest(k,results.items(),key=lambda item:item[1])
 

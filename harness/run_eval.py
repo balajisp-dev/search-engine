@@ -22,6 +22,8 @@ import time
 import numpy
 
 RESULTS_DIR=Path(__file__).resolve().parent.parent/"results"
+# built on-disk indexes, one folder per dataset (gitignored)
+INDEXES_DIR=Path(__file__).resolve().parent.parent/"indexes"
 
 def run_eval(dataset:Dataset,retriever:Retriever):
     response={}
@@ -96,6 +98,6 @@ if __name__=="__main__":
     parser.add_argument("--dataset", default="scifact")
     arg=parser.parse_args()
     dataset=load_dataset(dataset_name=arg.dataset)
-    results=[run_eval(dataset,BM25sRetriever()),run_eval(dataset,MyBM25Retriever()),run_eval(dataset,DenseRetriever())]
+    results=[run_eval(dataset,BM25sRetriever()),run_eval(dataset,MyBM25Retriever(indexes_dir=INDEXES_DIR/dataset.name)),run_eval(dataset,DenseRetriever())]
     print_scorecard(dataset.name,results)
     print(f"\nsaved {save_results(dataset,results).relative_to(RESULTS_DIR.parent)}")

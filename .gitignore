@@ -9,6 +9,9 @@ __pycache__/
 data/*
 !data/.gitkeep
 
+# Built on-disk indexes (rebuildable, can be large)
+indexes/
+
 # Rust (later)
 engine/target/
 

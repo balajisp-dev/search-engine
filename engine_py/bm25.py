@@ -18,9 +18,9 @@ the ranking is identical.
 from engine_py.analyzer import Analyzer
 from engine_py.index import InvertedIndex
 import heapq
-import math
 from pathlib import Path
 from engine_py.segment import SegmentReader, write_segment
+from engine_py import scoring
 
 
 DEFAULT_INDEX_DIR=Path(__file__).resolve().parent.parent / "indexes" / "default"
@@ -36,15 +36,17 @@ class MyBM25Retriever:
         self.segment_reader:SegmentReader | None = None
 
     def index(self, docs: dict[str, str]) -> None:
+        if self.segment_reader is not None:
+            self.segment_reader.close()
+            
         inverted_index=InvertedIndex(self.analyzer)
         inverted_index.build(docs=docs)
         write_segment(inverted_index,self.path)
+
         self.segment_reader=SegmentReader(self.path)
 
     def idf(self, term: str) -> float:
-        docs_with_term=self.segment_reader.df(term)
-        N=self.segment_reader.N
-        return math.log(1+(N-docs_with_term+0.5)/(docs_with_term+0.5))
+        return scoring.idf(N=self.segment_reader.N,df=self.segment_reader.df(term))
 
     def L(self,doc_len):
         return (1-self.b+(self.b*doc_len/self.segment_reader.avgdl))

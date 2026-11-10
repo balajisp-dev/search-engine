@@ -15,11 +15,12 @@ accumulator, take the top k with heapq.nlargest. A query term repeated n times c
 bm25s's "lucene" method drops the constant (k1 + 1), so these scores are exactly 2.5x its scores;
 the ranking is identical.
 """
+from collections import Counter
 from engine_py.analyzer import Analyzer
 from engine_py.index import InvertedIndex
 import heapq
 from pathlib import Path
-from engine_py.segment import SegmentReader, write_segment
+from engine_py.segment import EXHAUSTED, SegmentReader, write_segment
 from engine_py import scoring
 
 
@@ -38,11 +39,10 @@ class MyBM25Retriever:
     def index(self, docs: dict[str, str]) -> None:
         if self.segment_reader is not None:
             self.segment_reader.close()
-            
+
         inverted_index=InvertedIndex(self.analyzer)
         inverted_index.build(docs=docs)
         write_segment(inverted_index,self.path)
-
         self.segment_reader=SegmentReader(self.path)
 
     def idf(self, term: str) -> float:
@@ -58,13 +58,59 @@ class MyBM25Retriever:
 
     def search(self, query: str, k: int) -> list[tuple[str, float]]:
         tokens=self.analyzer.analyze(query)
-        results={}
-        for token in tokens:
-            idf=self.idf(token)
-            for doc_pos,tf in self.segment_reader.postings(token):
+        min_heap=[]
+        freq=Counter(tokens)
+        if not len(tokens):
+            return []
+        cursors={}
+        idf_dict={}
+        for term in freq.keys():
+            cursors[term]=self.segment_reader.cursor(term)
+            idf_dict[term]=self.idf(term)
+        sorted_dict={}
+        for cursor in cursors.values():
+            doc_pos=cursor.doc()
+            sorted_dict.setdefault(doc_pos,[])
+            sorted_dict[doc_pos].append(cursor)
+        while True:
+
+            if len(min_heap)==k:
+                ub_sum=0
+                theta=min_heap[0][0]
+                found_pivot=False
+                for doc_pos,doc_cursors in sorted(sorted_dict.items()):
+                    for cursor in doc_cursors:
+                        ub_sum+=cursor.ub*freq[cursor.get_term()]
+                        if ub_sum>theta:
+                            for cursor in cursors.values():
+                                if cursor.doc()<doc_pos:
+                                    cursor.advance(doc_pos)
+                            found_pivot=True
+                            break
+                    if found_pivot:break
+                if not found_pivot:break
+            sorted_dict={}
+            for cursor in cursors.values():
+                doc_pos=cursor.doc()
+                sorted_dict.setdefault(doc_pos,[])
+                sorted_dict[doc_pos].append(cursor)
+
+            min_doc=min(sorted_dict)
+            if min_doc==EXHAUSTED:
+                break
+            doc_score=0
+            for cursor in sorted_dict.get(min_doc,[]):
+                doc_pos=cursor.doc()
+                tf=cursor.tf()
+                idf=idf_dict[cursor.get_term()]
                 tf_part=self.tf(doc_pos=doc_pos,tf=tf)
-                score=idf*tf_part
-                results.setdefault(self.segment_reader.doc_ids[doc_pos],0)
-                results[self.segment_reader.doc_ids[doc_pos]]+=score
-        return heapq.nlargest(k,results.items(),key=lambda item:item[1])
+                doc_score+=(idf*tf_part)*freq[cursor.get_term()]
+                cursor.next()
+            entry=(doc_score,-1*min_doc)
+            if len(min_heap)<k:
+                heapq.heappush(min_heap,entry)
+            elif doc_score>min_heap[0][0]:
+                heapq.heappushpop(min_heap,entry)
+        final_top_k=sorted(min_heap, key=lambda e: (-e[0], -e[1]))
+        return [(self.segment_reader.doc_ids[-1*doc_pos],score) for score,doc_pos in final_top_k]
 

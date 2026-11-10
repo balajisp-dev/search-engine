@@ -203,10 +203,10 @@ class SegmentReader:
     def cursor(self, term: str) -> "PostingsCursor":
         """A cursor over one term's postings that decodes blocks lazily (exhausted at once if unseen)."""
         if not self.terms_json.get(term):
-            return PostingsCursor(self, [], 0)
+            return PostingsCursor(self, [], 0,term)
         df, _, first_header, num_headers = self.terms_json[term]
         sliced_headers = self.blocks_json[first_header:first_header + num_headers]
-        return PostingsCursor(self, sliced_headers, df)
+        return PostingsCursor(self, sliced_headers, df,term)
 
 
 class PostingsCursor:
@@ -226,7 +226,7 @@ class PostingsCursor:
     A new cursor is positioned on the term's first posting; past the last one, doc() is EXHAUSTED.
     """
 
-    def __init__(self, reader: SegmentReader, headers: list[list], df: int) -> None:
+    def __init__(self, reader: SegmentReader, headers: list[list], df: int,term:str | None) -> None:
         self.headers = headers
         self.reader = reader
         self.df = df
@@ -235,6 +235,14 @@ class PostingsCursor:
         self.i = 0
         self.blocks_decoded = 0
         self.load_block(0)
+        self.term=term
+        self.ub=0
+        term_meta=self.reader.terms_json.get(term,[])
+        if len(term_meta)>0:
+            self.ub=term_meta[1]
+
+    def get_term(self):
+        return self.term
 
     def load_block(self, n: int) -> None:
         """Decode block n and point at its first posting; past the last block -> exhausted."""

@@ -1,0 +1,84 @@
+{
+  "dataset": "fiqa",
+  "date": "2026-11-10T16:51:19",
+  "git_commit": "fbf398c",
+  "num_queries": 648,
+  "num_docs": 57638,
+  "index_s": 5.582239291863516,
+  "by_k": [
+    {
+      "k": 10,
+      "modes": {
+        "taat": {
+          "p50_ms": 24.959375034086406,
+          "p99_ms": 72.57108676712951,
+          "mean_ms": 27.32348848740789,
+          "postings_scored_per_query": 44027.14351851852,
+          "blocks_decoded_per_query": 347.945987654321,
+          "mismatches_vs_taat": 0
+        },
+        "daat": {
+          "p50_ms": 65.13574987184256,
+          "p99_ms": 190.59490785002706,
+          "mean_ms": 71.94491191680923,
+          "postings_scored_per_query": 42706.739197530864,
+          "blocks_decoded_per_query": 337.5216049382716,
+          "mismatches_vs_taat": 0
+        },
+        "wand": {
+          "p50_ms": 30.06435453426093,
+          "p99_ms": 101.83064094046125,
+          "mean_ms": 34.92265355623798,
+          "postings_scored_per_query": 12961.498456790123,
+          "blocks_decoded_per_query": 337.02314814814815,
+          "mismatches_vs_taat": 0
+        },
+        "bmw": {
+          "p50_ms": 39.466646034270525,
+          "p99_ms": 134.60667803883544,
+          "mean_ms": 45.71729312423778,
+          "postings_scored_per_query": 11392.364197530864,
+          "blocks_decoded_per_query": 337.00925925925924,
+          "mismatches_vs_taat": 0
+        }
+      }
+    },
+    {
+      "k": 100,
+      "modes": {
+        "taat": {
+          "p50_ms": 24.920187541283667,
+          "p99_ms": 71.82439765194427,
+          "mean_ms": 27.55492281083903,
+          "postings_scored_per_query": 44027.14351851852,
+          "blocks_decoded_per_query": 347.945987654321,
+          "mismatches_vs_taat": 0
+        },
+        "daat": {
+          "p50_ms": 65.45379187446088,
+          "p99_ms": 198.6869492661208,
+          "mean_ms": 72.85345178478352,
+          "postings_scored_per_query": 42706.739197530864,
+          "blocks_decoded_per_query": 337.5216049382716,
+          "mismatches_vs_taat": 0
+        },
+        "wand": {
+          "p50_ms": 40.359312552027404,
+          "p99_ms": 118.90861365245651,
+          "mean_ms": 45.7772265201331,
+          "postings_scored_per_query": 19100.429012345678,
+          "blocks_decoded_per_query": 337.50308641975306,
+          "mismatches_vs_taat": 0
+        },
+        "bmw": {
+          "p50_ms": 56.39087501913309,
+          "p99_ms": 166.41032995423302,
+          "mean_ms": 63.44641782853602,
+          "postings_scored_per_query": 17350.300925925927,
+          "blocks_decoded_per_query": 337.50154320987656,
+          "mismatches_vs_taat": 0
+        }
+      }
+    }
+  ]
+}

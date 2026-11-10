@@ -12,8 +12,8 @@ data/*
 # Built on-disk indexes (rebuildable, can be large)
 indexes/
 
-# Rust (later)
-engine/target/
+# Rust build output
+engine_rs/target/
 
 # OS / editor
 .DS_Store

@@ -55,7 +55,7 @@ class MyBM25Retriever:
         doc_length=self.segment_reader.docs_len[doc_pos]
         L=self.L(doc_length)
         return ((self.k1+1)*tf/(tf+self.k1*L))
-
+  
     def search(self, query: str, k: int) -> list[tuple[str, float]]:
         tokens=self.analyzer.analyze(query)
         min_heap=[]
@@ -67,13 +67,17 @@ class MyBM25Retriever:
         for term in freq.keys():
             cursors[term]=self.segment_reader.cursor(term)
             idf_dict[term]=self.idf(term)
-        sorted_dict={}
-        for cursor in cursors.values():
-            doc_pos=cursor.doc()
-            sorted_dict.setdefault(doc_pos,[])
-            sorted_dict[doc_pos].append(cursor)
+        # sorted_dict={}
+        # for cursor in cursors.values():
+        #     doc_pos=cursor.doc()
+        #     sorted_dict.setdefault(doc_pos,[])
+        #     sorted_dict[doc_pos].append(cursor)
         while True:
-
+            sorted_dict={}
+            for cursor in cursors.values():
+                doc_pos=cursor.doc()
+                sorted_dict.setdefault(doc_pos,[])
+                sorted_dict[doc_pos].append(cursor)
             if len(min_heap)==k:
                 ub_sum=0
                 theta=min_heap[0][0]
@@ -82,9 +86,23 @@ class MyBM25Retriever:
                     for cursor in doc_cursors:
                         ub_sum+=cursor.ub*freq[cursor.get_term()]
                         if ub_sum>theta:
+
+                            block_max_at=[(*cursor.block_max_at(doc_pos),freq[cursor.get_term()]) for cursor in cursors.values() if cursor.doc()<=doc_pos]
+                            total_block_max=sum(item[0]*item[2] for item in block_max_at)
+                            min_last_doc=min(item[1] for item in block_max_at)
+                            # the cap: the check above ignored cursors past the pivot, so its bound
+                            # only holds until the nearest one; never jump past it
+                            target=min_last_doc+1
+                            uncounted_docs=[c.doc() for c in cursors.values() if c.doc()>doc_pos]
+                            if uncounted_docs:
+                                target=min(target,min(uncounted_docs))
+
                             for cursor in cursors.values():
-                                if cursor.doc()<doc_pos:
-                                    cursor.advance(doc_pos)
+                                if cursor.doc()<=doc_pos:
+                                    if total_block_max>theta:
+                                        cursor.advance(doc_pos)
+                                    else:
+                                        cursor.advance(target)
                             found_pivot=True
                             break
                     if found_pivot:break

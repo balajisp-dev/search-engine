@@ -300,3 +300,14 @@ class PostingsCursor:
             self.load_block(next_block)
             while self.doc() < target:
                 self.i += 1
+
+    def block_max_at(self,target:int) ->tuple[float,int]:
+        current_block=self.block
+        while current_block<len(self.headers) and target>self.headers[current_block][0]:
+            current_block+=1
+        if current_block>=len(self.headers):
+            return (0, EXHAUSTED)
+        return (self.headers[current_block][3],self.headers[current_block][0])
+
+
+

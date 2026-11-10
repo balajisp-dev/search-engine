@@ -9,8 +9,15 @@ Matches bm25s's defaults: k1=1.5, b=0.75, Lucene IDF:
     TF-part  = tf * (k1 + 1) / (tf + k1 * L)
     score    = sum over query terms of IDF(t) * TF-part
 
-Search is term-at-a-time: walk each query term's postings, add into a {doc id: score}
-accumulator, take the top k with heapq.nlargest. A query term repeated n times counts n times.
+A query term repeated n times counts n times. Four search modes, all returning the same top k
+(ties: smaller doc position first):
+
+    taat  term-at-a-time: walk each term's whole postings list into a {doc: score} accumulator
+    daat  document-at-a-time: one cursor per term, score one doc at a time into a size-k heap
+    wand  daat + WAND: skip docs whose term upper bounds (ub) can't beat theta, the heap's k-th score
+    bmw   wand + Block-Max WAND: also skip runs of docs whose block maxes can't beat theta
+
+stats counts work across searches: postings_scored (tf parts computed) and blocks_decoded.
 
 bm25s's "lucene" method drops the constant (k1 + 1), so these scores are exactly 2.5x its scores;
 the ranking is identical.
@@ -27,9 +34,14 @@ from engine_py import scoring
 DEFAULT_INDEX_DIR=Path(__file__).resolve().parent.parent / "indexes" / "default"
 
 class MyBM25Retriever:
-    name: str = "my-bm25"
+    MODES = ("taat", "daat", "wand", "bmw")
 
-    def __init__(self, k1: float = 1.5, b: float = 0.75,indexes_dir:Path=DEFAULT_INDEX_DIR) -> None:
+    def __init__(self, k1: float = 1.5, b: float = 0.75,indexes_dir:Path=DEFAULT_INDEX_DIR,mode:str="bmw") -> None:
+        if mode not in self.MODES:
+            raise ValueError(f"mode must be one of {self.MODES}, got {mode!r}")
+        self.mode=mode
+        self.name=f"my-bm25-{mode}"
+        self.stats={"postings_scored":0,"blocks_decoded":0}
         self.k1 = k1
         self.b = b
         self.analyzer = Analyzer()
@@ -57,6 +69,10 @@ class MyBM25Retriever:
         return ((self.k1+1)*tf/(tf+self.k1*L))
   
     def search(self, query: str, k: int) -> list[tuple[str, float]]:
+        if self.mode=="taat":
+            return self.search_taat(query,k)
+        use_wand=self.mode in ("wand","bmw")
+        use_block_max=self.mode=="bmw"
         tokens=self.analyzer.analyze(query)
         min_heap=[]
         freq=Counter(tokens)
@@ -78,7 +94,7 @@ class MyBM25Retriever:
                 doc_pos=cursor.doc()
                 sorted_dict.setdefault(doc_pos,[])
                 sorted_dict[doc_pos].append(cursor)
-            if len(min_heap)==k:
+            if use_wand and len(min_heap)==k:
                 ub_sum=0
                 theta=min_heap[0][0]
                 found_pivot=False
@@ -86,6 +102,12 @@ class MyBM25Retriever:
                     for cursor in doc_cursors:
                         ub_sum+=cursor.ub*freq[cursor.get_term()]
                         if ub_sum>theta:
+                            if not use_block_max:
+                                for cursor in cursors.values():
+                                    if cursor.doc()<doc_pos:
+                                        cursor.advance(doc_pos)
+                                found_pivot=True
+                                break
 
                             block_max_at=[(*cursor.block_max_at(doc_pos),freq[cursor.get_term()]) for cursor in cursors.values() if cursor.doc()<=doc_pos]
                             total_block_max=sum(item[0]*item[2] for item in block_max_at)
@@ -123,12 +145,30 @@ class MyBM25Retriever:
                 idf=idf_dict[cursor.get_term()]
                 tf_part=self.tf(doc_pos=doc_pos,tf=tf)
                 doc_score+=(idf*tf_part)*freq[cursor.get_term()]
+                self.stats["postings_scored"]+=1
                 cursor.next()
             entry=(doc_score,-1*min_doc)
             if len(min_heap)<k:
                 heapq.heappush(min_heap,entry)
             elif doc_score>min_heap[0][0]:
                 heapq.heappushpop(min_heap,entry)
+        self.stats["blocks_decoded"]+=sum(cursor.blocks_decoded for cursor in cursors.values())
         final_top_k=sorted(min_heap, key=lambda e: (-e[0], -e[1]))
         return [(self.segment_reader.doc_ids[-1*doc_pos],score) for score,doc_pos in final_top_k]
 
+    def search_taat(self, query: str, k: int) -> list[tuple[str, float]]:
+        """The Phase 2 term-at-a-time search: decode each term's whole postings list."""
+        tokens=self.analyzer.analyze(query)
+        results={}
+        for token in tokens:
+            idf=self.idf(token)
+            term_data=self.segment_reader.terms_json.get(token)
+            if term_data:
+                self.stats["blocks_decoded"]+=term_data[3]   # postings() decodes every block
+            for doc_pos,tf in self.segment_reader.postings(token):
+                tf_part=self.tf(doc_pos=doc_pos,tf=tf)
+                self.stats["postings_scored"]+=1
+                results[doc_pos]=results.get(doc_pos,0)+idf*tf_part
+        # same tie rule as the heap modes: higher score first, then smaller doc position
+        top=sorted(results.items(),key=lambda item:(-item[1],item[0]))[:k]
+        return [(self.segment_reader.doc_ids[doc_pos],score) for doc_pos,score in top]

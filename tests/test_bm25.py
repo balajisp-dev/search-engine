@@ -155,3 +155,60 @@ def test_ranking_matches_bm25s_on_scifact(tmp_path):
     reference.index(dataset.corpus)
     for q_id,query in dataset.queries.items():
         assert ids(mine.search(query,10)) == ids(reference.search(query,10)), q_id
+
+
+# ---- search modes: taat, daat, wand and bmw must return exactly the same top k ----
+
+TOY_QUERIES=["cats","fish","cats fish","dogs swim fish","fish fish cats","zebra"]
+
+@pytest.mark.parametrize("mode",["daat","wand","bmw"])
+def test_modes_match_taat_on_toy(tmp_path,mode):
+    taat=MyBM25Retriever(indexes_dir=tmp_path/"taat",mode="taat")
+    other=MyBM25Retriever(indexes_dir=tmp_path/mode,mode=mode)
+    taat.index(TOY_DOCS)
+    other.index(TOY_DOCS)
+    for query in TOY_QUERIES:
+        for k in (1,2,3,10):
+            assert ids(other.search(query,k)) == ids(taat.search(query,k)), (query,k)
+
+def test_unknown_mode_is_rejected():
+    with pytest.raises(ValueError):
+        MyBM25Retriever(mode="fast")
+
+def test_name_includes_mode():
+    assert MyBM25Retriever(mode="wand").name == "my-bm25-wand"
+
+
+@pytest.fixture(scope="module")
+def scifact_modes(tmp_path_factory):
+    """One SciFact index, opened by a retriever per mode (indexing once keeps this test fast)."""
+    from harness.datasets import load_dataset
+    dataset=load_dataset("scifact")
+    path=tmp_path_factory.mktemp("scifact")
+    retrievers={}
+    for mode in MyBM25Retriever.MODES:
+        retriever=MyBM25Retriever(indexes_dir=path/mode,mode=mode)
+        retriever.index(dataset.corpus)
+        retrievers[mode]=retriever
+    return dataset,retrievers
+
+@needs_scifact
+@pytest.mark.parametrize("k",[10,101])
+def test_modes_match_taat_on_scifact(scifact_modes,k):
+    dataset,retrievers=scifact_modes
+    for q_id,query in dataset.queries.items():
+        expected=ids(retrievers["taat"].search(query,k))
+        for mode in ("daat","wand","bmw"):
+            assert ids(retrievers[mode].search(query,k)) == expected, (mode,q_id,k)
+
+@needs_scifact
+def test_skipping_scores_fewer_postings_on_scifact(scifact_modes):
+    dataset,retrievers=scifact_modes
+    scored={}
+    for mode in ("daat","wand","bmw"):
+        retriever=retrievers[mode]
+        retriever.stats={"postings_scored":0,"blocks_decoded":0}
+        for query in dataset.queries.values():
+            retriever.search(query,10)
+        scored[mode]=retriever.stats["postings_scored"]
+    assert scored["bmw"] < scored["wand"] < scored["daat"]

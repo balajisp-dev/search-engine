@@ -45,4 +45,5 @@ Scope guardrails: single node only, no fancy query syntax. Never cut the eval ha
 - Setup: `python3.12 -m venv .venv && source .venv/bin/activate && pip install -e ".[baselines,dev]"`
 - Download: `python scripts/download_beir.py scifact`
 - Eval: `python -m harness.run_eval --dataset scifact`
+- Latency by search mode (taat/daat/wand/bmw) + chart: `python scripts/bench_latency.py --dataset scifact`
 - Tests: `pytest`
